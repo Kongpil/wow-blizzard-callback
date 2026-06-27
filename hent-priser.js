@@ -101,13 +101,13 @@ async function run() {
         fs.writeFileSync(filnavn, "Dato;Ugedag;Item;Gennemsnitspris (Guld);Udbud (Supply)\n");
       }
       fs.appendFileSync(filnavn, nyeLinjer);
-      Console.log("Alle TBC Consumables er opdateret i markedsdata.csv");
+      console.log("Alle TBC Consumables er opdateret i markedsdata.csv");
     }
 
   } catch (error) {
-    Console.error("Fejl under kørsel:", error);
-    Process.exit(1);
+    console.error("Fejl under kørsel:", error);
+    process.exit(1);
   }
 }
 
-Run();
+run();
