@@ -16,14 +16,25 @@ async function run() {
     const token = authJson.access_token;
 
     console.log("Henter auktionsdata for Spineshatter EU (1301)...");
-    const aucRes = await fetch("https://eu.api.blizzard.com/data/wow/connected-realm/1301/auctions?namespace=dynamic-classic-eu&locale=en_GB", {
+    // Vi bruger det korrekte dynamiske navnerum til Classic/Anniversary
+    const url = "https://eu.api.blizzard.com/data/wow/connected-realm/1301/auctions?namespace=dynamic-classic-eu&locale=en_GB";
+    
+    const aucRes = await fetch(url, {
       headers: { "Authorization": `Bearer ${token}` }
     });
     const aucJson = await aucRes.json();
 
+    // SIKKERHEDSTJEK: Hvis Blizzard returnerer en fejl eller en anden struktur
+    if (!aucJson || !aucJson.auctions) {
+      console.error("Modtog uventet dataformat fra Blizzard API.");
+      console.log("Svar fra Blizzard:", JSON.stringify(aucJson).substring(0, 500));
+      throw new Error("Feltet 'auctions' mangler i API-svaret. Tjek navnerum eller Realm ID.");
+    }
+
+    console.log(`Modtog ${aucJson.auctions.length} aktive auktioner. Matcher mod TBC katalog...`);
+
     // Det fulde TBC Consumables katalog
     const itemsToTrack = {
-      // Potions
       22829: "Super Healing Potion",
       22832: "Super Mana Potion",
       22839: "Destruction Potion",
@@ -32,8 +43,6 @@ async function run() {
       22849: "Ironshield Potion",
       22847: "Major Dreamless Sleep Potion",
       22850: "Heroic Potion",
-
-      // Elixirs & Flasks
       22853: "Flask of Pure Death",
       22861: "Flask of Blinding Light",
       22866: "Flask of Mighty Restoration",
@@ -46,8 +55,6 @@ async function run() {
       22827: "Elixir of Mastery",
       22834: "Elixir of Major Shadow Power",
       22835: "Elixir of Major Firepower",
-
-      // Food Buffs & Raiding Consumables
       27657: "Blackened Basilisk",
       27664: "Grilled Mudfish",
       27655: "Spicy Hot Talbuk",
@@ -72,7 +79,8 @@ async function run() {
     let nyeLinjer = "";
 
     for (const [id, name] of Object.entries(itemsToTrack)) {
-      const activeAuctions = aucJson.auctions.filter(a => a.item.id == id);
+      // Robust tjek på om item og id eksisterer på den enkelte auktion
+      const activeAuctions = aucJson.auctions.filter(a => a && a.item && a.item.id == id);
       
       if (activeAuctions.length > 0) {
         let totalCopper = 0;
@@ -105,7 +113,7 @@ async function run() {
     }
 
   } catch (error) {
-    console.error("Fejl under kørsel:", error);
+    console.error("Fejl under kørsel:", error.message);
     process.exit(1);
   }
 }
