@@ -2,20 +2,20 @@ name: WoW Auction House Price Tracker
 
 on:
   schedule:
-    - cron: '0 20 * * *' # Kører automatisk hver aften kl. 20:00 (UTC)
-  workflow_dispatch: # Gør det muligt at starte den manuelt med et klik
+    - cron: '0 20 * * *'
+  workflow_dispatch:
 
 jobs:
   build:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout repo
-        uses: actions/checkout@v3
+        uses: actions/checkout@v4
 
       - name: Setup Node.js
-        uses: actions/setup-node@v3
+        uses: actions/setup-node@v4
         with:
-          node-version: 18
+          node-version: 24
 
       - name: Hent priser fra Blizzard
         env:
