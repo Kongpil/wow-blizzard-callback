@@ -91,7 +91,6 @@ async function run() {
 
         nyeLinjer += `${dato};${ugedag};${name};${guldPris};${udbud}\n`;
       } else {
-        // Hvis varen ikke er på AH, logger vi den stadig med 0 i pris og udbud for historikkens skyld
         nyeLinjer += `${dato};${ugedag};${name};0.00;0\n`;
       }
     }
@@ -99,16 +98,16 @@ async function run() {
     if (nyeLinjer) {
       const filnavn = "markedsdata.csv";
       if (!fs.existsSync(filnavn)) {
-        fs.writeFileSync(filnavn, "Dato;Ugedag;Item;Gennemsnitspris (Guld);Udbud (Supply)\n");[cite: 1, 2]
+        fs.writeFileSync(filnavn, "Dato;Ugedag;Item;Gennemsnitspris (Guld);Udbud (Supply)\n");
       }
       fs.appendFileSync(filnavn, nyeLinjer);
-      console.log("Alle TBC Consumables er opdateret i markedsdata.csv");
+      Console.log("Alle TBC Consumables er opdateret i markedsdata.csv");
     }
 
   } catch (error) {
-    console.error("Fejl under kørsel:", error);
-    process.exit(1);
+    Console.error("Fejl under kørsel:", error);
+    Process.exit(1);
   }
 }
 
-run();
+Run();
