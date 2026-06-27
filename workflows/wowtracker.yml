@@ -1,0 +1,32 @@
+name: WoW Auction House Price Tracker
+
+on:
+  schedule:
+    - cron: '0 20 * * *' # Kører automatisk hver aften kl. 20:00 (UTC)
+  workflow_dispatch: # Gør det muligt at starte den manuelt med et klik
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repo
+        uses: actions/checkout@v3
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v3
+        with:
+          node-version: 18
+
+      - name: Hent priser fra Blizzard
+        env:
+          BLIZZARD_CLIENT_ID: ${{ secrets.BLIZZARD_CLIENT_ID }}
+          BLIZZARD_CLIENT_SECRET: ${{ secrets.BLIZZARD_CLIENT_SECRET }}
+        run: node hent-priser.js
+
+      - name: Commit og Push ændringer tilbage til repo
+        run: |
+          git config --global user.name 'GitHub Action'
+          git config --global user.email 'action@github.com'
+          git add markedsdata.csv || true
+          git commit -m "Automatisk opdatering af markedsdata" || true
+          git push || true
