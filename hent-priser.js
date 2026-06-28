@@ -5,6 +5,7 @@ const clientSecret = process.env.BLIZZARD_CLIENT_SECRET;
 
 async function run() {
   try {
+    console.log("Henter Access Token fra Blizzard...");
     const authHeader = Buffer.from(`${clientId}:${clientSecret}`).toString('base64');
     const authRes = await fetch("https://oauth.battle.net/token", {
       method: "POST",
@@ -14,48 +15,23 @@ async function run() {
     const authJson = await authRes.json();
     const token = authJson.access_token;
 
-    // Vi tjekker det primære progressive navnerum
-    const namespace = "dynamic-classic-eu";
-    const listUrl = `https://eu.api.blizzard.com/data/wow/connected-realm/index?namespace=${namespace}&locale=en_GB`;
-    const listRes = await fetch(listUrl, { headers: { "Authorization": `Bearer ${token}` } });
-    const listJson = await listRes.json();
-
-    const validIds = listJson.connected_realms.map(cr => {
-      const matches = cr.href.match(/connected-realm\/(\d+)/);
-      return matches ? parseInt(matches[1]) : null;
-    }).filter(id => id !== null);
-
-    let targetRealmId = null;
-
-    // Systematisk lokalisering af Spineshatter uden gætteri
-    for (const id of validIds) {
-      try {
-        const realmRes = await fetch(`https://eu.api.blizzard.com/data/wow/connected-realm/${id}?namespace=${namespace}&locale=en_GB`, {
-          headers: { "Authorization": `Bearer ${token}` }
-        });
-        if (realmRes.status === 200) {
-          const realmJson = await realmRes.json();
-          const isSpineshatter = realmJson.realms.some(r => r.name.toLowerCase() === "spineshatter");
-          if (isSpineshatter) {
-            targetRealmId = id;
-            break;
-          }
-        }
-      } catch (e) {
-        // Fortsæt ved netværksfejl
-      }
-    }
-
-    if (!targetRealmId) {
-      throw new Error("Kunne ikke lokalisere Spineshatter på EU Classic API'et.");
-    }
-
-    // Hent data fra det korrekte auktionshus
-    const url = `https://eu.api.blizzard.com/data/wow/connected-realm/${targetRealmId}/auctions?namespace=${namespace}&locale=en_GB`;
-    const aucRes = await fetch(url, { headers: { "Authorization": `Bearer ${token}` } });
+    console.log("Henter auktionsdata for Spineshatter EU Anniversary (Realm ID: 503)...");
+    
+    // Vi bruger det korrekte Retail/Anniversary endpoint og navnerum
+    const url = "https://eu.api.blizzard.com/data/wow/connected-realm/503/auctions?namespace=dynamic-eu&locale=en_GB";
+    
+    const aucRes = await fetch(url, {
+      headers: { "Authorization": `Bearer ${token}` }
+    });
     const aucJson = await aucRes.json();
 
-    // Hele kataloget (inkluderer test på Ghost Mushroom og dine TBC consumables)
+    if (!aucJson || !aucJson.auctions) {
+      throw new Error("Modtog uventet dataformat eller tomme data fra Blizzard API.");
+    }
+
+    console.log(`Modtog ${aucJson.auctions.length} aktive auktioner.`);
+
+    // Dine TBC varer samt test-svampen
     const itemsToTrack = {
       8845: "Ghost Mushroom",
       22445: "Arcane Dust",
@@ -79,15 +55,21 @@ async function run() {
       if (activeAuctions.length > 0) {
         let totalCopper = 0;
         let count = 0;
+        
         activeAuctions.forEach(auc => {
-          if (auc.buyout) {
+          // Retail/Anniversary API-strukturen kan bruge auc.buyout eller auc.unit_price
+          const price = auc.buyout || auc.unit_price || (auc.bid && auc.bid * 1.05);
+          if (price) {
             const quantity = auc.quantity || 1;
-            totalCopper += (auc.buyout / quantity);
+            // Hvis det er unit_price skal der ikke divideres med antal, da det er stykpris
+            totalCopper += auc.unit_price ? price : (price / quantity);
             count++;
           }
         });
+        
         const guldPris = count > 0 ? (totalCopper / count / 10000).toFixed(2) : 0;
         const udbud = activeAuctions.reduce((sum, a) => sum + (a.quantity || 1), 0);
+
         nyeLinjer += `${dato};${ugedag};${name};${guldPris};${udbud}\n`;
       } else {
         nyeLinjer += `${dato};${ugedag};${name};0.00;0\n`;
@@ -95,9 +77,11 @@ async function run() {
     }
 
     const filnavn = "markedsdata.csv";
-    fs.writeFileSync(filnavn, "Dato;Ugedag;Item;Gennemsnitspris (Guld);Udbud (Supply)\n");
+    if (!fs.existsSync(filnavn)) {
+      fs.writeFileSync(filnavn, "Dato;Ugedag;Item;Gennemsnitspris (Guld);Udbud (Supply)\n");
+    }
     fs.appendFileSync(filnavn, nyeLinjer);
-    console.log(`Færdig! Data hentet direkte fra Spineshatter (ID: ${targetRealmId}) og skrevet til CSV.`);
+    console.log("Markedsdata.csv er opdateret med priser fra Spineshatter Anniversary!");
 
   } catch (error) {
     console.error("Fejl under kørsel:", error.message);
