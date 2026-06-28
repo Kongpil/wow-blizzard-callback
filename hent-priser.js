@@ -3,6 +3,44 @@ const fs = require('fs');
 const clientId = process.env.BLIZZARD_CLIENT_ID;
 const clientSecret = process.env.BLIZZARD_CLIENT_SECRET;
 
+async function fetchJson(url, options = {}) {
+  const res = await fetch(url, options);
+
+  if (!res.ok) {
+    const text = await res.text();
+    throw new Error(`Blizzard API fejl (${res.status}): ${text}`);
+  }
+
+  return res.json();
+}
+
+async function getAuctionData(apiUrl, token) {
+  const data = await fetchJson(apiUrl, {
+    headers: {
+      Authorization: `Bearer ${token}`,
+    },
+  });
+
+  if (!data) {
+    throw new Error('Blizzard API returnerede ingen data.');
+  }
+
+  if (Array.isArray(data.auctions)) {
+    return data.auctions;
+  }
+
+  if (Array.isArray(data.files) && data.files[0]?.url) {
+    console.log("Data leveret som fil-link. Downloader auktionsfil...");
+    const fileData = await fetchJson(data.files[0].url);
+    if (Array.isArray(fileData.auctions)) {
+      return fileData.auctions;
+    }
+  }
+
+  console.error('Uventet Blizzard-svar:', JSON.stringify(data, null, 2));
+  throw new Error('Modtog uventet dataformat fra Blizzard API.');
+}
+
 async function run() {
   try {
     console.log("Henter Access Token fra Blizzard...");
@@ -12,26 +50,31 @@ async function run() {
       headers: { "Authorization": `Basic ${authHeader}`, "Content-Type": "application/x-www-form-urlencoded" },
       body: "grant_type=client_credentials"
     });
+    
+    if (!authRes.ok) {
+      const text = await authRes.text();
+      throw new Error(`Kunne ikke hente token (${authRes.status}): ${text}`);
+    }
+    
     const authJson = await authRes.json();
     const token = authJson.access_token;
 
     console.log("Henter auktionsdata for Spineshatter EU Anniversary (Realm ID: 503)...");
+    const apiUrl = "https://eu.api.blizzard.com/data/wow/connected-realm/503/auctions?namespace=dynamic-eu&locale=en_GB";
     
-    // Vi bruger det korrekte Retail/Anniversary endpoint og navnerum
-    const url = "https://eu.api.blizzard.com/data/wow/connected-realm/503/auctions?namespace=dynamic-eu&locale=en_GB";
-    
-    const aucRes = await fetch(url, {
-      headers: { "Authorization": `Bearer ${token}` }
-    });
-    const aucJson = await aucRes.json();
+    const auctions = await getAuctionData(apiUrl, token);
 
-    if (!aucJson || !aucJson.auctions) {
-      throw new Error("Modtog uventet dataformat eller tomme data fra Blizzard API.");
+    if (!Array.isArray(auctions)) {
+      throw new Error('Auktionsdata kunne ikke læses.');
     }
 
-    console.log(`Modtog ${aucJson.auctions.length} aktive auktioner.`);
+    if (auctions.length === 0) {
+      console.log('Ingen auktioner fundet for realm 503.');
+      process.exit(0);
+    }
 
-    // Dine TBC varer samt test-svampen
+    console.log(`Modtog ${auctions.length} aktive auktioner.`);
+
     const itemsToTrack = {
       8845: "Ghost Mushroom",
       22445: "Arcane Dust",
@@ -50,18 +93,16 @@ async function run() {
     let nyeLinjer = "";
 
     for (const [id, name] of Object.entries(itemsToTrack)) {
-      const activeAuctions = aucJson.auctions.filter(a => a && a.item && a.item.id == id);
+      const activeAuctions = auctions.filter(a => a && a.item && a.item.id == id);
       
       if (activeAuctions.length > 0) {
         let totalCopper = 0;
         let count = 0;
         
         activeAuctions.forEach(auc => {
-          // Retail/Anniversary API-strukturen kan bruge auc.buyout eller auc.unit_price
           const price = auc.buyout || auc.unit_price || (auc.bid && auc.bid * 1.05);
           if (price) {
             const quantity = auc.quantity || 1;
-            // Hvis det er unit_price skal der ikke divideres med antal, da det er stykpris
             totalCopper += auc.unit_price ? price : (price / quantity);
             count++;
           }
